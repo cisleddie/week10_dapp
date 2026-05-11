@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FreCoin — FRE Payment DApp</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+KR:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:       #0a0c0f;
+    --surface:  #111418;
+    --border:   #1e2530;
+    --accent:   #00e5ff;
+    --accent2:  #ff6b35;
+    --muted:    #4a5568;
+    --text:     #d4dae4;
+    --textdim:  #6b7a8d;
+    --success:  #00d084;
+    --warn:     #ffc947;
+    --danger:   #ff4757;
+    --mono:     'Space Mono', monospace;
+    --sans:     'Noto Sans KR', sans-serif;
+    --r:        6px;
+  }
+  html { font-size: 15px; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Scanline overlay ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,229,255,0.015) 2px,
+      rgba(0,229,255,0.015) 4px
+    );
+  }
+
+  /* ── Layout ── */
+  .app { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; padding: 32px 20px 60px; }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 20px; margin-bottom: 36px;
+  }
+  .logo { display: flex; align-items: baseline; gap: 10px; }
+  .logo-sym {
+    font-family: var(--mono); font-size: 1.8rem; font-weight: 700;
+    color: var(--accent); letter-spacing: -1px;
+  }
+  .logo-name { font-size: 0.78rem; color: var(--textdim); letter-spacing: 3px; text-transform: uppercase; }
+  .chain-badge {
+    font-family: var(--mono); font-size: 0.72rem;
+    background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.25);
+    color: var(--accent); padding: 5px 12px; border-radius: 20px; letter-spacing: 1px;
+  }
+
+  /* ── Wallet bar ── */
+  .wallet-bar {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 28px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 14px 18px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background .3s; }
+  .dot.on { background: var(--success); box-shadow: 0 0 8px var(--success); }
+  .wallet-addr { font-family: var(--mono); font-size: 0.82rem; color: var(--textdim); flex: 1; }
+  .wallet-addr.connected { color: var(--text); }
+  #btn-connect {
+    font-family: var(--mono); font-size: 0.8rem; font-weight: 700;
+    background: var(--accent); color: #000; border: none; cursor: pointer;
+    padding: 8px 18px; border-radius: var(--r); letter-spacing: 0.5px;
+    transition: opacity .15s, transform .1s;
+  }
+  #btn-connect:hover { opacity: 0.85; transform: translateY(-1px); }
+  #btn-connect:disabled { opacity: 0.4; cursor: default; transform: none; }
+
+  /* ── Grid ── */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+
+  /* ── Panel ── */
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 22px 22px 20px; position: relative; overflow: hidden;
+  }
+  .panel::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.4;
+  }
+  .panel.accent2::before { background: linear-gradient(90deg, transparent, var(--accent2), transparent); }
+  .panel-title {
+    font-family: var(--mono); font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 3px; text-transform: uppercase; color: var(--textdim);
+    margin-bottom: 16px;
+  }
+
+  /* ── Balance display ── */
+  .balance-big {
+    font-family: var(--mono); font-size: 2.4rem; font-weight: 700;
+    color: var(--accent); letter-spacing: -1px; line-height: 1;
+  }
+  .balance-unit { font-size: 1rem; color: var(--textdim); margin-left: 6px; }
+  .balance-sub { font-size: 0.78rem; color: var(--textdim); margin-top: 6px; }
+
+  /* ── Form ── */
+  label { display: block; font-size: 0.78rem; color: var(--textdim); margin-bottom: 6px; letter-spacing: 1px; text-transform: uppercase; }
+  input[type="text"], input[type="number"] {
+    width: 100%; font-family: var(--mono); font-size: 0.9rem;
+    background: #0d1117; color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--r);
+    padding: 10px 14px; outline: none; transition: border-color .2s;
+    -moz-appearance: textfield;
+  }
+  input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  input:focus { border-color: var(--accent); }
+  .field { margin-bottom: 14px; }
+  .hint { font-size: 0.72rem; color: var(--muted); margin-top: 5px; }
+
+  /* ── Buttons ── */
+  .btn {
+    font-family: var(--mono); font-size: 0.82rem; font-weight: 700;
+    border: none; border-radius: var(--r); cursor: pointer;
+    padding: 11px 22px; width: 100%; letter-spacing: 1px;
+    transition: opacity .15s, transform .1s; margin-top: 4px;
+    text-transform: uppercase;
+  }
+  .btn:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.35; cursor: default; transform: none; }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-orange  { background: var(--accent2); color: #fff; }
+  .btn-ghost   { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .btn-sm { font-size: 0.75rem; padding: 7px 14px; width: auto; }
+
+  /* ── Separator ── */
+  .sep { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+
+  /* ── Fee preview ── */
+  .fee-row {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.8rem; padding: 6px 0; border-bottom: 1px solid var(--border);
+  }
+  .fee-row:last-child { border-bottom: none; }
+  .fee-label { color: var(--textdim); }
+  .fee-val   { font-family: var(--mono); color: var(--text); }
+  .fee-val.accent  { color: var(--accent); }
+  .fee-val.orange  { color: var(--accent2); }
+  .fee-val.success { color: var(--success); }
+
+  /* ── Log ── */
+  .log-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 16px;
+    max-height: 220px; overflow-y: auto;
+  }
+  .log-entry {
+    font-family: var(--mono); font-size: 0.75rem; padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04); line-height: 1.5;
+  }
+  .log-entry:last-child { border-bottom: none; }
+  .log-time { color: var(--muted); }
+  .log-ok   { color: var(--success); }
+  .log-err  { color: var(--danger); }
+  .log-info { color: var(--accent); }
+  .log-empty { color: var(--muted); font-family: var(--mono); font-size: 0.78rem; text-align: center; padding: 12px 0; }
+
+  /* ── Waveform decoration ── */
+  .wave-deco {
+    position: absolute; bottom: 0; right: 0; opacity: 0.07; pointer-events: none;
+  }
+
+  /* ── Status toast ── */
+  #toast {
+    position: fixed; bottom: 28px; right: 24px; z-index: 999;
+    font-family: var(--mono); font-size: 0.8rem;
+    background: #1a1e26; border: 1px solid var(--border);
+    padding: 12px 20px; border-radius: var(--r);
+    transform: translateY(80px); opacity: 0;
+    transition: transform .3s, opacity .3s;
+    max-width: 320px; line-height: 1.5;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.ok   { border-color: var(--success); color: var(--success); }
+  #toast.err  { border-color: var(--danger);  color: var(--danger); }
+
+  /* ── Address short ── */
+  .addr-short { font-family: var(--mono); font-size: 0.82rem; }
+
+  /* ── Admin section collapse ── */
+  details > summary {
+    font-family: var(--mono); font-size: 0.72rem; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--textdim); cursor: pointer;
+    list-style: none; display: flex; align-items: center; gap: 8px;
+    padding: 10px 0; user-select: none;
+  }
+  details > summary::before { content: '▶'; font-size: 0.6rem; transition: transform .2s; }
+  details[open] > summary::before { transform: rotate(90deg); }
+  details > summary::-webkit-details-marker { display: none; }
+
+  /* ── Nodit config ── */
+  .nodit-cfg { font-size: 0.78rem; color: var(--textdim); }
+  .nodit-cfg span { font-family: var(--mono); color: var(--accent); font-size: 0.75rem; }
+
+  /* ── Row flex ── */
+  .row { display: flex; gap: 10px; }
+  .row .field { flex: 1; }
+</style>
+</head>
+<body>
+<div id="toast"></div>
+
+<div class="app">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <span class="logo-sym">FRE</span>
+      <span class="logo-name">FreCoin · Payment DApp</span>
+    </div>
+    <div class="chain-badge">GIWA Chain · Nodit</div>
+  </header>
+
+  <!-- Wallet Bar -->
+  <div class="wallet-bar">
+    <div class="dot" id="dot"></div>
+    <div class="wallet-addr" id="wallet-addr">MetaMask 미연결</div>
+    <button id="btn-connect" onclick="connectWallet()">Connect Wallet</button>
+  </div>
+
+  <!-- Nodit Config -->
+  <div class="panel" style="margin-bottom:16px">
+    <div class="panel-title">⚙ 네트워크 설정 (Nodit · GIWA Chain)</div>
+    <div class="row">
+      <div class="field">
+        <label>RPC URL</label>
+        <input type="text" id="rpc-url" value="https://giwa-testnet.nodit.io" placeholder="https://...">
+      </div>
+      <div class="field" style="max-width:160px">
+        <label>Chain ID</label>
+        <input type="number" id="chain-id" value="1337">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>FreCoin (FRE) 주소</label>
+        <input type="text" id="fre-addr" placeholder="0x...">
+      </div>
+      <div class="field">
+        <label>CafePayment 주소</label>
+        <input type="text" id="payment-addr" placeholder="0x...">
+      </div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="saveConfig()" style="margin-top:4px">저장 &amp; 적용</button>
+    <p class="hint" style="margin-top:8px">컨트랙트 배포 후 주소를 입력하세요. MetaMask에 GIWA 네트워크가 추가됩니다.</p>
+  </div>
+
+  <!-- Main Grid -->
+  <div class="grid">
+
+    <!-- FRE Balance -->
+    <div class="panel">
+      <div class="panel-title">💰 내 FRE 잔액</div>
+      <div class="balance-big" id="my-balance">—<span class="balance-unit">FRE</span></div>
+      <div class="balance-sub" id="my-addr-short">지갑 미연결</div>
+      <hr class="sep">
+      <div class="panel-title">📊 컨트랙트 정보</div>
+      <div class="fee-row"><span class="fee-label">수수료율</span><span class="fee-val orange" id="fee-rate">—</span></div>
+      <div class="fee-row"><span class="fee-label">Merchant</span><span class="fee-val addr-short" id="merchant-addr" style="font-size:0.72rem">—</span></div>
+      <div class="fee-row"><span class="fee-label">총 공급량</span><span class="fee-val" id="total-supply">—</span></div>
+      <button class="btn btn-ghost btn-sm" onclick="loadInfo()" style="margin-top:14px;width:100%">새로고침</button>
+    </div>
+
+    <!-- Mint (Minter용) -->
+    <div class="panel accent2">
+      <svg class="wave-deco" width="120" height="80" viewBox="0 0 120 80">
+        <path d="M0,40 Q15,10 30,40 Q45,70 60,40 Q75,10 90,40 Q105,70 120,40" fill="none" stroke="#ff6b35" stroke-width="1.5"/>
+        <path d="M0,50 Q15,25 30,50 Q45,75 60,50 Q75,25 90,50 Q105,75 120,50" fill="none" stroke="#ff6b35" stroke-width="0.8" opacity="0.4"/>
+      </svg>
+      <div class="panel-title">🪙 FRE 발행 (Minter 전용)</div>
+      <div class="field">
+        <label>받는 주소</label>
+        <input type="text" id="mint-to" placeholder="0x...">
+      </div>
+      <div class="field">
+        <label>발행량 (FRE)</label>
+        <input type="number" id="mint-amount" placeholder="1000" min="1">
+      </div>
+      <button class="btn btn-orange" onclick="mintFre()">발행하기</button>
+      <p class="hint">Owner가 configureMinter로 등록된 주소만 가능</p>
+    </div>
+  </div>
+
+  <!-- Payment Panel -->
+  <div class="panel" style="margin-bottom:16px">
+    <div class="panel-title">☕ FreCoin 결제</div>
+    <div class="grid" style="margin-bottom:0">
+      <div>
+        <div class="field">
+          <label>결제 금액 (FRE)</label>
+          <input type="number" id="pay-amount" placeholder="5000" min="1" oninput="calcFee()">
+        </div>
+        <div style="background:#0d1117; border: 1px solid var(--border); border-radius:var(--r); padding:14px; margin-bottom:14px">
+          <div class="fee-row">
+            <span class="fee-label">결제 금액</span>
+            <span class="fee-val accent" id="fv-total">0 FRE</span>
+          </div>
+          <div class="fee-row">
+            <span class="fee-label">수수료 (<span id="fv-rate-pct">—</span>)</span>
+            <span class="fee-val orange" id="fv-fee">0 FRE</span>
+          </div>
+          <div class="fee-row">
+            <span class="fee-label">Merchant 수령</span>
+            <span class="fee-val success" id="fv-merchant">0 FRE</span>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-pay" onclick="payWithApprove()">
+          ① Approve → ② Pay
+        </button>
+        <p class="hint">approve 트랜잭션 후 자동으로 pay 트랜잭션이 전송됩니다</p>
+      </div>
+      <div>
+        <div class="panel-title">🔐 내 FRE Approve 현황</div>
+        <div class="fee-row">
+          <span class="fee-label">Payment 컨트랙트에 승인된 금액</span>
+        </div>
+        <div class="fee-row">
+          <span class="fee-val accent" id="allowance-val" style="font-size:1.1rem">—</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadAllowance()">조회</button>
+        </div>
+        <hr class="sep">
+        <div class="field">
+          <label>직접 Approve 금액</label>
+          <input type="number" id="approve-amount" placeholder="10000" min="0">
+        </div>
+        <button class="btn btn-ghost" onclick="approveOnly()">Approve만 하기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Transfer Panel -->
+  <div class="panel" style="margin-bottom:16px">
+    <div class="panel-title">↗ FRE 전송</div>
+    <div class="row">
+      <div class="field">
+        <label>받는 주소</label>
+        <input type="text" id="transfer-to" placeholder="0x...">
+      </div>
+      <div class="field" style="max-width:200px">
+        <label>금액 (FRE)</label>
+        <input type="number" id="transfer-amount" placeholder="1000" min="1">
+      </div>
+    </div>
+    <button class="btn btn-ghost" style="max-width:200px" onclick="transferFre()">전송하기</button>
+  </div>
+
+  <!-- Admin Panel -->
+  <div class="panel" style="margin-bottom:16px">
+    <details>
+      <summary>관리자 기능 (Owner 전용)</summary>
+      <div style="padding-top:14px">
+        <div class="grid">
+          <div>
+            <div class="panel-title" style="margin-bottom:10px">🔧 Minter 등록</div>
+            <div class="field">
+              <label>Minter 주소</label>
+              <input type="text" id="admin-minter" placeholder="0x...">
+            </div>
+            <div class="field">
+              <label>Mint 한도 (FRE)</label>
+              <input type="number" id="admin-allowance" placeholder="1000000" min="1">
+            </div>
+            <button class="btn btn-ghost" onclick="configureMinter()">Minter 등록</button>
+          </div>
+          <div>
+            <div class="panel-title" style="margin-bottom:10px">💸 수수료 관리</div>
+            <div class="field">
+              <label>수수료율 (basis points, 200=2%)</label>
+              <input type="number" id="admin-fee" placeholder="200" min="0" max="1000">
+            </div>
+            <button class="btn btn-ghost" onclick="setFeeRate()" style="margin-bottom:10px">수수료율 변경</button>
+            <button class="btn btn-orange" onclick="withdrawFees()">수수료 인출</button>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <!-- TX Log -->
+  <div class="panel">
+    <div class="panel-title" style="display:flex;justify-content:space-between;align-items:center">
+      <span>📋 트랜잭션 로그</span>
+      <button class="btn btn-ghost btn-sm" onclick="clearLog()">지우기</button>
+    </div>
+    <div class="log-wrap" id="tx-log">
+      <div class="log-empty">트랜잭션이 없습니다</div>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.umd.min.js"></script>
+<script>
+// ── ABI 정의 ──────────────────────────────────────────────
+const FRE_ABI = [
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+  "function totalSupply() view returns (uint256)",
+  "function balanceOf(address) view returns (uint256)",
+  "function transfer(address,uint256) returns (bool)",
+  "function approve(address,uint256) returns (bool)",
+  "function allowance(address,address) view returns (uint256)",
+  "function mint(address,uint256)",
+  "function burn(uint256)",
+  "function configureMinter(address,uint256)",
+  "function removeMinter(address)",
+  "function isMinter(address) view returns (bool)",
+  "function minterAllowance(address) view returns (uint256)",
+  "function blacklist(address)",
+  "function unBlacklist(address)",
+  "function isBlacklisted(address) view returns (bool)",
+  "function pauser() view returns (address)",
+  "function pause()",
+  "function unpause()",
+  "function owner() view returns (address)",
+  "event Transfer(address indexed,address indexed,uint256)",
+  "event Mint(address indexed,address indexed,uint256)"
+];
+
+const PAYMENT_ABI = [
+  "function pay(address,uint256)",
+  "function merchant() view returns (address)",
+  "function feeRate() view returns (uint256)",
+  "function FEE_DENOMINATOR() view returns (uint256)",
+  "function MAX_FEE_RATE() view returns (uint256)",
+  "function setFeeRate(uint256)",
+  "function setMerchant(address)",
+  "function addWhitelistedToken(address)",
+  "function removeWhitelistedToken(address)",
+  "function whitelistedTokens(address) view returns (bool)",
+  "function withdrawFees(address)",
+  "function collectedFees(address) view returns (uint256)",
+  "event Paid(address indexed,address indexed,uint256,uint256,string,uint256)"
+];
+
+// ── 상태 ──────────────────────────────────────────────────
+let provider, signer, walletAddr;
+let freContract, paymentContract;
+let currentFeeRate = 200n; // default 2%
+
+// ── 설정 저장/로드 ──────────────────────────────────────────
+function saveConfig() {
+  const rpc = document.getElementById('rpc-url').value.trim();
+  const chainId = document.getElementById('chain-id').value.trim();
+  const freAddr = document.getElementById('fre-addr').value.trim();
+  const payAddr = document.getElementById('payment-addr').value.trim();
+  localStorage.setItem('fre_config', JSON.stringify({ rpc, chainId, freAddr, payAddr }));
+  log('설정 저장됨', 'info');
+  if (walletAddr) initContracts();
+}
+
+function loadConfig() {
+  const raw = localStorage.getItem('fre_config');
+  if (!raw) return;
+  try {
+    const c = JSON.parse(raw);
+    if (c.rpc)     document.getElementById('rpc-url').value = c.rpc;
+    if (c.chainId) document.getElementById('chain-id').value = c.chainId;
+    if (c.freAddr) document.getElementById('fre-addr').value = c.freAddr;
+    if (c.payAddr) document.getElementById('payment-addr').value = c.payAddr;
+  } catch(_) {}
+}
+
+// ── 지갑 연결 ─────────────────────────────────────────────
+async function connectWallet() {
+  if (!window.ethereum) { toast('MetaMask가 없습니다', 'err'); return; }
+  try {
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    walletAddr = accounts[0];
+    provider = new ethers.BrowserProvider(window.ethereum);
+    signer = await provider.getSigner();
+
+    // GIWA 네트워크 추가 시도
+    const chainId = parseInt(document.getElementById('chain-id').value);
+    const rpcUrl  = document.getElementById('rpc-url').value.trim();
+    try {
+      await window.ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: '0x' + chainId.toString(16),
+          chainName: 'GIWA Testnet',
+          nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+          rpcUrls: [rpcUrl],
+          blockExplorerUrls: []
+        }]
+      });
+    } catch(e) { /* already added */ }
+
+    document.getElementById('dot').classList.add('on');
+    document.getElementById('wallet-addr').textContent = walletAddr;
+    document.getElementById('wallet-addr').classList.add('connected');
+    document.getElementById('btn-connect').textContent = 'Connected';
+    document.getElementById('btn-connect').disabled = true;
+    document.getElementById('my-addr-short').textContent = shortAddr(walletAddr);
+
+    initContracts();
+    log(`지갑 연결: ${shortAddr(walletAddr)}`, 'ok');
+
+    window.ethereum.on('accountsChanged', a => { walletAddr = a[0]; location.reload(); });
+  } catch(e) {
+    toast('연결 실패: ' + e.message, 'err');
+  }
+}
+
+function initContracts() {
+  const freAddr = document.getElementById('fre-addr').value.trim();
+  const payAddr = document.getElementById('payment-addr').value.trim();
+  if (freAddr && ethers.isAddress(freAddr)) {
+    freContract = new ethers.Contract(freAddr, FRE_ABI, signer);
+  }
+  if (payAddr && ethers.isAddress(payAddr)) {
+    paymentContract = new ethers.Contract(payAddr, PAYMENT_ABI, signer);
+  }
+  loadInfo();
+}
+
+// ── 정보 로드 ─────────────────────────────────────────────
+async function loadInfo() {
+  if (!freContract || !walletAddr) return;
+  try {
+    const [bal, supply] = await Promise.all([
+      freContract.balanceOf(walletAddr),
+      freContract.totalSupply()
+    ]);
+    document.getElementById('my-balance').innerHTML =
+      `${bal.toLocaleString()}<span class="balance-unit">FRE</span>`;
+    document.getElementById('total-supply').textContent = supply.toLocaleString() + ' FRE';
+  } catch(e) { console.warn('FRE load:', e.message); }
+
+  if (!paymentContract) return;
+  try {
+    const [rate, mch] = await Promise.all([
+      paymentContract.feeRate(),
+      paymentContract.merchant()
+    ]);
+    currentFeeRate = rate;
+    const pct = (Number(rate) / 100).toFixed(2);
+    document.getElementById('fee-rate').textContent = pct + '%';
+    document.getElementById('fv-rate-pct').textContent = pct + '%';
+    document.getElementById('merchant-addr').textContent = shortAddr(mch);
+    calcFee();
+  } catch(e) { console.warn('Payment load:', e.message); }
+}
+
+async function loadAllowance() {
+  if (!freContract || !paymentContract || !walletAddr) { toast('먼저 설정 후 지갑 연결하세요', 'err'); return; }
+  try {
+    const al = await freContract.allowance(walletAddr, paymentContract.target);
+    document.getElementById('allowance-val').textContent = al.toLocaleString() + ' FRE';
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── 수수료 계산 ──────────────────────────────────────────
+function calcFee() {
+  const amount = BigInt(document.getElementById('pay-amount').value || '0');
+  const fee = (amount * currentFeeRate) / 10000n;
+  const merchant = amount - fee;
+  document.getElementById('fv-total').textContent    = amount.toLocaleString() + ' FRE';
+  document.getElementById('fv-fee').textContent      = fee.toLocaleString() + ' FRE';
+  document.getElementById('fv-merchant').textContent = merchant.toLocaleString() + ' FRE';
+}
+
+// ── 발행 ──────────────────────────────────────────────────
+async function mintFre() {
+  if (!freContract) { toast('FreCoin 주소를 설정하세요', 'err'); return; }
+  const to = document.getElementById('mint-to').value.trim();
+  const amount = document.getElementById('mint-amount').value;
+  if (!ethers.isAddress(to)) { toast('올바른 주소를 입력하세요', 'err'); return; }
+  if (!amount || amount <= 0) { toast('발행량을 입력하세요', 'err'); return; }
+  try {
+    log(`Mint ${amount} FRE → ${shortAddr(to)} 요청 중...`, 'info');
+    const tx = await freContract.mint(to, BigInt(amount));
+    log(`Tx: ${shortHash(tx.hash)} — 확인 대기...`, 'info');
+    await tx.wait();
+    log(`✓ Mint 완료: ${amount} FRE → ${shortAddr(to)}`, 'ok');
+    toast(`${amount} FRE 발행 성공!`, 'ok');
+    loadInfo();
+  } catch(e) {
+    log(`✗ Mint 실패: ${e.reason || e.message}`, 'err');
+    toast('Mint 실패: ' + (e.reason || e.message), 'err');
+  }
+}
+
+// ── 결제 (approve → pay) ──────────────────────────────────
+async function payWithApprove() {
+  if (!freContract || !paymentContract) { toast('컨트랙트 주소를 설정하세요', 'err'); return; }
+  const amount = document.getElementById('pay-amount').value;
+  if (!amount || amount <= 0) { toast('결제 금액을 입력하세요', 'err'); return; }
+  const amountBig = BigInt(amount);
+  const freAddr = document.getElementById('fre-addr').value.trim();
+  try {
+    // Step 1: Approve
+    log(`① Approve ${amount} FRE 요청 중...`, 'info');
+    const tx1 = await freContract.approve(paymentContract.target, amountBig);
+    log(`Approve Tx: ${shortHash(tx1.hash)}`, 'info');
+    await tx1.wait();
+    log(`✓ Approve 완료`, 'ok');
+
+    // Step 2: Pay
+    log(`② Pay ${amount} FRE 요청 중...`, 'info');
+    const tx2 = await paymentContract.pay(freAddr, amountBig);
+    log(`Pay Tx: ${shortHash(tx2.hash)}`, 'info');
+    await tx2.wait();
+
+    const fee = (amountBig * currentFeeRate) / 10000n;
+    log(`✓ 결제 완료! 금액: ${amount} FRE / 수수료: ${fee} FRE`, 'ok');
+    toast(`결제 성공! ${amount} FRE`, 'ok');
+    loadInfo();
+  } catch(e) {
+    log(`✗ 결제 실패: ${e.reason || e.message}`, 'err');
+    toast('결제 실패: ' + (e.reason || e.message), 'err');
+  }
+}
+
+async function approveOnly() {
+  if (!freContract || !paymentContract) { toast('컨트랙트 주소를 설정하세요', 'err'); return; }
+  const amount = document.getElementById('approve-amount').value;
+  if (!amount || amount < 0) { toast('금액을 입력하세요', 'err'); return; }
+  try {
+    log(`Approve ${amount} FRE 요청 중...`, 'info');
+    const tx = await freContract.approve(paymentContract.target, BigInt(amount));
+    await tx.wait();
+    log(`✓ Approve 완료: ${amount} FRE`, 'ok');
+    toast(`Approve 완료: ${amount} FRE`, 'ok');
+    loadAllowance();
+  } catch(e) {
+    log(`✗ Approve 실패: ${e.reason || e.message}`, 'err');
+    toast('Approve 실패', 'err');
+  }
+}
+
+// ── 전송 ──────────────────────────────────────────────────
+async function transferFre() {
+  if (!freContract) { toast('FreCoin 주소를 설정하세요', 'err'); return; }
+  const to = document.getElementById('transfer-to').value.trim();
+  const amount = document.getElementById('transfer-amount').value;
+  if (!ethers.isAddress(to)) { toast('올바른 주소를 입력하세요', 'err'); return; }
+  if (!amount || amount <= 0) { toast('금액을 입력하세요', 'err'); return; }
+  try {
+    log(`전송 ${amount} FRE → ${shortAddr(to)} 요청...`, 'info');
+    const tx = await freContract.transfer(to, BigInt(amount));
+    await tx.wait();
+    log(`✓ 전송 완료: ${amount} FRE → ${shortAddr(to)}`, 'ok');
+    toast(`${amount} FRE 전송 성공!`, 'ok');
+    loadInfo();
+  } catch(e) {
+    log(`✗ 전송 실패: ${e.reason || e.message}`, 'err');
+    toast('전송 실패', 'err');
+  }
+}
+
+// ── 관리자 ────────────────────────────────────────────────
+async function configureMinter() {
+  if (!freContract) { toast('FreCoin 주소를 설정하세요', 'err'); return; }
+  const minter = document.getElementById('admin-minter').value.trim();
+  const al = document.getElementById('admin-allowance').value;
+  if (!ethers.isAddress(minter)) { toast('올바른 주소를 입력하세요', 'err'); return; }
+  try {
+    log(`Minter 등록: ${shortAddr(minter)} / 한도: ${al} FRE`, 'info');
+    const tx = await freContract.configureMinter(minter, BigInt(al));
+    await tx.wait();
+    log(`✓ Minter 등록 완료`, 'ok');
+    toast('Minter 등록 완료', 'ok');
+  } catch(e) {
+    log(`✗ 실패: ${e.reason || e.message}`, 'err');
+    toast('실패: ' + (e.reason || e.message), 'err');
+  }
+}
+
+async function setFeeRate() {
+  if (!paymentContract) { toast('Payment 주소를 설정하세요', 'err'); return; }
+  const rate = document.getElementById('admin-fee').value;
+  try {
+    log(`수수료율 변경: ${rate} bp (${(rate/100).toFixed(2)}%)`, 'info');
+    const tx = await paymentContract.setFeeRate(BigInt(rate));
+    await tx.wait();
+    currentFeeRate = BigInt(rate);
+    log(`✓ 수수료율 변경 완료`, 'ok');
+    toast('수수료율 변경 완료', 'ok');
+    loadInfo();
+  } catch(e) {
+    log(`✗ 실패: ${e.reason || e.message}`, 'err');
+    toast('실패', 'err');
+  }
+}
+
+async function withdrawFees() {
+  if (!paymentContract) { toast('Payment 주소를 설정하세요', 'err'); return; }
+  const freAddr = document.getElementById('fre-addr').value.trim();
+  try {
+    log('수수료 인출 요청...', 'info');
+    const tx = await paymentContract.withdrawFees(freAddr);
+    await tx.wait();
+    log('✓ 수수료 인출 완료', 'ok');
+    toast('수수료 인출 완료', 'ok');
+    loadInfo();
+  } catch(e) {
+    log(`✗ 실패: ${e.reason || e.message}`, 'err');
+    toast('실패: ' + (e.reason || e.message), 'err');
+  }
+}
+
+// ── 유틸 ──────────────────────────────────────────────────
+function shortAddr(a) { return a ? a.slice(0,6) + '...' + a.slice(-4) : '—'; }
+function shortHash(h) { return h ? h.slice(0,10) + '...' + h.slice(-6) : '—'; }
+
+function log(msg, type='info') {
+  const el = document.getElementById('tx-log');
+  const empty = el.querySelector('.log-empty');
+  if (empty) empty.remove();
+  const now = new Date().toLocaleTimeString('ko-KR');
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  div.innerHTML = `<span class="log-time">[${now}]</span> <span class="log-${type}">${msg}</span>`;
+  el.prepend(div);
+  if (el.children.length > 50) el.lastChild.remove();
+}
+
+function clearLog() {
+  document.getElementById('tx-log').innerHTML = '<div class="log-empty">트랜잭션이 없습니다</div>';
+}
+
+let toastTimer;
+function toast(msg, type='ok') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, 3200);
+}
+
+// ── 초기화 ────────────────────────────────────────────────
+loadConfig();
+</script>
+</body>
+</html>
